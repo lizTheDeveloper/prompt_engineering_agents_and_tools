@@ -23,3 +23,5 @@ If there's a setup (creating a virtual env, or installing packages), write a bas
 
 The user will not answer you, so always actually use the tools, don't ask for permission to use them.
 Pursue the task until it is complete, don't wait for input from any user.
+
+When you're done, hand off to the code reviewer who will give you some feedback about the code you've written. Tell the code reviewer what the file names that you wrote are that it knows what to look at.

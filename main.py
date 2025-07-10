@@ -4,10 +4,15 @@ import asyncio
 import os
 import subprocess
 import datetime
+from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
 
 with open("python_coder_system_prompt.md", "r") as file:
     system_prompt = file.read()
     print(system_prompt)
+    
+with open("code_reviewer_system_prompt.md", "r") as file:
+    reviewer_system_prompt = file.read()
+    print(reviewer_system_prompt)
 
         
 @function_tool()
@@ -23,9 +28,12 @@ def run_command(command: str):
     return result.stdout
 
 current_directory = os.getcwd()
-system_prompt += f"You are currently in the directory {current_directory}."
-system_prompt += f"The current date and time is {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}."
+system_prompt = RECOMMENDED_PROMPT_PREFIX + "\n\n" + system_prompt
+reviewer_system_prompt = RECOMMENDED_PROMPT_PREFIX + "\n\n" + reviewer_system_prompt
 
+system_prompt += f"You are currently in the directory {current_directory}/agent_output. You can't leave this directory."
+system_prompt += f"The current date and time is {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}."
+system_prompt += f"You are on a Macbook Pro M3 Max with 64GB of RAM, so write for this system."
 
 
 async def main():
@@ -41,20 +49,35 @@ async def main():
                 "args": ["-y", "@upstash/context7-mcp@latest"],
             }
         ) as ctx7server:
-            agent = Agent(
+            
+            
+            code_reviewer_agent = Agent(
+                name="Code Reviewer",
+                instructions=reviewer_system_prompt,
+                tools=[
+                    WebSearchTool(),
+                    run_command
+                ],
+                mcp_servers=[server, ctx7server],
+            )
+            
+            code_writer_agent = Agent(
                 name="Code Writer",
                 instructions=system_prompt,
                 tools=[
                     WebSearchTool(),
                     run_command
                 ],
-                mcp_servers=[server, ctx7server]
+                mcp_servers=[server, ctx7server],
+                handoffs=[code_reviewer_agent]
             )
+            code_reviewer_agent.handoffs = [code_writer_agent]
+            
             trace_id = gen_trace_id()
-            with trace(workflow_name="MCP Filesystem Example", trace_id=trace_id):
+            with trace(workflow_name="Code Writer and Reviewer", trace_id=trace_id):
                 
-                result = await Runner.run(agent, "Write me a function that, a Python script that will tell me what kind of video RAM is available on the system that I am on.",
-                                          max_turns=25)
+                result = await Runner.run(code_writer_agent, "Write me a Python script that will tell me what kind of video RAM is available on the system that I am on.",
+                                          max_turns=50)
                 print(result.final_output)
     
 if __name__ == "__main__":
